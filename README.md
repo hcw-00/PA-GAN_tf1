@@ -1,3 +1,4 @@
 # PA-GAN tensorflow v1 implementation (Unofficial)
-PA-GAN: Progressive Attention Generative Adversarial Network for Facial Attribute Editing tensorflow1 implementation  
+Simple PA-GAN implementation (tensorflow v1)  
+Link : https://arxiv.org/abs/2007.05892
 ing..
