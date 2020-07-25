@@ -141,48 +141,43 @@ def attiribute_predictor(inputs, reuse=False, name="attiribute_predictor"):
 
         return net
 
-def generator(inputs, eta, reuse=False, name="generator"):
 
-    with tf.variable_scope("generator"):
+def attentive_editor_mk(inputs, reuse=False, name="attentive_editor_mk"):
 
-        if reuse:
-            tf.get_variable_scope().reuse_variables()
-        else:
-            assert tf.get_variable_scope().reuse is False
-
-        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
-        net = slim.fully_connected(net, 784, activation_fn=None, weights_initializer=tf.initializers.he_normal())
-
-        return net
-
-def e_encoder(inputs, reuse=False, name="e_encoder"):
-
-    with tf.variable_scope("e_encoder"):
+    with tf.variable_scope(name):
 
         if reuse:
             tf.get_variable_scope().reuse_variables()
         else:
             assert tf.get_variable_scope().reuse is False
 
-        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
-        net = slim.fully_connected(net, 50, activation_fn=None, weights_initializer=tf.initializers.he_normal())
+        net = slim.conv2d(net, 64*2^(k-1),1,1)
+        net_a = slim.batch_norm(net, activation_fn=tf.nn.relu)
+
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net_b = slim.batch_norm(net, activation_fn=tf.nn.relu)
+
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net = slim.batch_norm(net, activation_fn=tf.nn.relu)
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net_c = slim.batch_norm(net, activation_fn=tf.nn.relu)
+
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net = slim.batch_norm(net, activation_fn=tf.nn.relu)
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net = slim.batch_norm(net, activation_fn=tf.nn.relu)
+        net = slim.conv2d(net, 64*2^(k-1),3,1)
+        net_d = slim.batch_norm(net, activation_fn=tf.nn.relu)
+
+        # concatenation
+        net = tf.concat([net_a, net_b, net_c, net_d], axis=3)
+        #
+
+        net = slim.conv2d(net, 64*2^(k),4,2)
+        net = slim.batch_norm(net, activation_fn=tf.nn.relu)
+        net = slim.deconv2d(net, 13, 4, 2)
 
         return net
-
-def discriminator(inputs, reuse=False, name="discriminator"):
-
-    with tf.variable_scope("discriminator"):
-
-        if reuse:
-            tf.get_variable_scope().reuse_variables()
-        else:
-            assert tf.get_variable_scope().reuse is False
-
-        net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.relu, weights_initializer=tf.initializers.he_normal())
-        net = slim.fully_connected(net, 1, activation_fn=None, weights_initializer=tf.initializers.he_normal())
-
-        return net
-
 
 
 def abs_criterion(in_, target):
