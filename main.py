@@ -23,6 +23,7 @@ def get_params():
 
 
 def main():
+    args = get_params()
     if not os.path.exists(args.checkpoint_dir):
         os.makedirs(args.checkpoint_dir)
     if not os.path.exists(args.sample_dir):
