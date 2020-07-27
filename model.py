@@ -54,9 +54,10 @@ class pagan(object):
             #img = tf.image.random_flip_left_right(img)
             #img = tf.image.random_crop(img, [crop_size, crop_size, 3])
             #img = tf.clip_by_value(img, 0, 255) / 127.5 - 1
-            aug = iaa.CropToFixedSize(width=256, height=256)
-            img = aug(image=img)
-            img = list(img/127.5 - 1)
+            #aug = iaa.CropToFixedSize(width=256, height=256)
+            #img = aug(image=img)
+            #img = list(img/127.5 - 1)
+            img = img[:256,:256,:]
             img_batch.append(img)
             temp_label = [int(j) for j in labels[i+idx*self.batch_size]]
             label = temp_label+np.ones_like(temp_label)
@@ -131,7 +132,7 @@ class pagan(object):
             for idx in range(0, batch_idxs):
 
                 img_batch, label_batch = self._load_batch(self.img_path, self.labels, idx)
-
+                img_batch = np.zeros((1,256,256,3))
                 _ = self.sess.run([self.D_optim], feed_dict={self.real_img:img_batch, self.input_label:label_batch})
 
                 _ = self.sess.run([self.G_optim], feed_dict={self.real_img:img_batch, self.input_label:label_batch})
