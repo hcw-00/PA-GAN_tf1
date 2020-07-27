@@ -13,7 +13,7 @@ def get_params():
     parser.add_argument('--lr', dest='lr', type=float, default=0.0002, help='initial learning rate for adam') # default=0.0002
     parser.add_argument('--beta1', dest='beta1', type=float, default=0.0, help='beta1 momentum term of adam')
     parser.add_argument('--beta2', dest='beta2', type=float, default=0.99, help='beta2 momentum term of adam')
-    parser.add_argument('--phase', dest='phase', default='test', help='train, test') # 
+    parser.add_argument('--phase', dest='phase', default='train', help='train, test') # 
     parser.add_argument('--checkpoint_dir', dest='checkpoint_dir', default='./checkpoint', help='models are saved here')
     parser.add_argument('--sample_dir', dest='sample_dir', default='./sample', help='sample are saved here')
     parser.add_argument('--test_dir', dest='test_dir', default='./test', help='test sample are saved here')

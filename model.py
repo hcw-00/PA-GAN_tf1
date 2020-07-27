@@ -10,6 +10,7 @@ from module import *
 from utils import *
 import utils
 import cv2
+from imgaug import augmenters as iaa
 
 #TODO : add noise input eta
 
@@ -41,25 +42,31 @@ class pagan(object):
         return img_path, labels
 
     def _load_batch(self, img_path, labels, idx):
-        load_size = 143
-        crop_size = 128
+        #load_size = 143
+        #crop_size = 128
+        load_size = 286
+        crop_size = 256
         img_batch = []
         label_batch = []
         for i in range(self.batch_size):
             img = cv2.imread(img_path[i+idx*self.batch_size])
-            img = tf.image.resize(img, [load_size, load_size])
-            img = tf.image.random_flip_left_right(img)
-            img = tf.image.random_crop(img, [crop_size, crop_size, 3])
-            img = tf.clip_by_value(img, 0, 255) / 127.5 - 1
+            #img = tf.image.resize(img, [load_size, load_size])
+            #img = tf.image.random_flip_left_right(img)
+            #img = tf.image.random_crop(img, [crop_size, crop_size, 3])
+            #img = tf.clip_by_value(img, 0, 255) / 127.5 - 1
+            aug = iaa.CropToFixedSize(width=256, height=256)
+            img = aug(image=img)
+            img = list(img/127.5 - 1)
             img_batch.append(img)
-            label = (labels[i+idx*self.batch_size] + 1) // 2
-            label_batch.append(label)
+            temp_label = [int(j) for j in labels[i+idx*self.batch_size]]
+            label = temp_label+np.ones_like(temp_label)
+            label_batch.append(label//2)
         return img_batch, label_batch
 
 
     def _build_model(self, args):
 
-        self.real_img = tf.placeholder(tf.float32, [None,128,128,3], name='input')
+        self.real_img = tf.placeholder(tf.float32, [None,256,256,3], name='input')
         self.input_label = tf.placeholder(tf.float32, [None,40], name='label')
         
 
@@ -90,7 +97,7 @@ class pagan(object):
         self.g_loss = self.l_att + self.l_adv_g
         self.d_loss = self.l_c + self.l_adv_d
 
-        self.loss_summary = tf.summary.scalar("loss", l_c)
+        self.loss_summary = tf.summary.scalar("loss", self.l_c)
         
 
     def train(self, args):
@@ -117,7 +124,7 @@ class pagan(object):
 
         for epoch in range(args.epoch):
             
-            batch_idxs = len(self.train_label) // self.batch_size
+            batch_idxs = len(self.labels) // self.batch_size
 
             self.img_path, self.labels = shuffle(self.img_path, self.labels)
             
@@ -227,7 +234,7 @@ class pagan(object):
 
         #self.gen_from_latent = self.generator(self.latent, eta, reuse=True, name='generator')
         #for i in range(100):
-        #    for j in range(100):
+        #    for j in range(100)
 
-
-            
+        
+        

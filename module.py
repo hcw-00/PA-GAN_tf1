@@ -33,7 +33,7 @@ class D_network:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            net = conv_ln_activ(input,64,4,2)
+            net = conv_ln_activ(inputs,64,4,2)
             net = conv_ln_activ(net,128,4,2)
             net = conv_ln_activ(net,256,4,2)
             net = conv_ln_activ(net,512,4,2)
@@ -47,20 +47,20 @@ class D_network:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            net = self.d_common(input, reuse=False)
-            net = slim.fully_connected(net, 1024, activation_fn=tf.nn.leaky_relu)
+            #net = self.d_common(inputs, reuse=False)
+            net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.leaky_relu)
             net = slim.fully_connected(net, 1)
         return net
 
-    def attribute_classifier(inputs, reuse=False, name="attribute_classifier"):
+    def attribute_classifier(self, inputs, reuse=False, name="attribute_classifier"):
         with tf.variable_scope(name):
             if reuse:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            net = self.d_common(input, reuse=True)
-            net = slim.fully_connected(net, 1024, activation_fn=tf.nn.leaky_relu)
-            net = slim.fully_connected(net, 13, activation_fn=tf.sigmoid)
+            #net = self.d_common(inputs, reuse=True)
+            net = slim.fully_connected(inputs, 1024, activation_fn=tf.nn.leaky_relu)
+            net = slim.fully_connected(net, 40, activation_fn=tf.sigmoid) # 13(?) -> 40
         return net
 
 
@@ -75,9 +75,9 @@ class G_network:
             fb4 = en_out[0]
             fa = en_out[1:] # [fa3, fa2, fa1]
             #mb4 = tf.zeros_like((-1,16,16,13))
-            mb4 = tf.zeros_like(fa[0][:,:,:,:13])
+            mb4 = tf.zeros_like(fb4[:,:,:,:13])
 
-            fb3, mb3 = self.attentive_editor(fa[0], fb4, k=3, b_att=b, mask_in=mb4, reuse=False)
+            fb3, mb3 = self.attentive_editor(fa[0], fb4, k=3, b_att=b, mask_in=mb4, reuse=False) #(out) fb3:,mb3, (in) fa[0]:32, fb4:16, mb4:16
             fb2, mb2 = self.attentive_editor(fa[1], fb3, k=2, b_att=b, mask_in=mb3, reuse=False)
             fb1, mb1 = self.attentive_editor(fa[2], fb2, k=1, b_att=b, mask_in=mb2, reuse=False)
             xb, mb0 = self.attentive_editor(xa, fb1, k=0, b_att=b, mask_in=mb1, reuse=False)
@@ -90,10 +90,10 @@ class G_network:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            fa1 = conv_bn_activ(input, 64, 4, 2)
-            fa2 = conv_bn_activ(fa1, 128, 4, 2)
-            fa3 = conv_bn_activ(fa2, 256, 4, 2)
-            fa4 = conv_bn_activ(fa3, 512, 4, 2)
+            fa1 = conv_bn_activ(input, 64, 4, 2)    # (?,128,128,3)
+            fa2 = conv_bn_activ(fa1, 128, 4, 2)     # (?, 64, 64,3)
+            fa3 = conv_bn_activ(fa2, 256, 4, 2)     # (?, 32, 32,3)
+            fa4 = conv_bn_activ(fa3, 512, 4, 2)     # (?, 16, 16,3)
         return [fa4, fa3, fa2, fa1]
 
     def attentive_editor(self, fa_in, fb_in, k, b_att, mask_in, reuse=False, name="attentive_editor"):
@@ -103,6 +103,8 @@ class G_network:
             else:
                 assert tf.get_variable_scope().reuse is False
             ek = self.attentive_editor_e_k(fb_in, b_att, k)
+            size = (mask_in.shape[1] * 2, mask_in.shape[2] * 2)
+            mask_in = tf.image.resize(mask_in, size)
             d_mask_k = self.attentive_editor_m_k(fa_in,ek,mask_in,b_att,k)
             mask_k = d_mask_k # + mask_in
             
@@ -130,7 +132,7 @@ class G_network:
                 net = slim.conv2d_transpose(net, 3, 3, 2, activation_fn=tf.nn.tanh)
         return net
 
-    def attentive_editor_m_k(self, fa_in, ek, mask_in, b, k, reuse=False, name="attentive_editor_m_k"):
+    def attentive_editor_m_k(self, fa_in, ek, mask_in, b, k, reuse=False, name="attentive_editor_m_k"): # 32,32,32
         with tf.variable_scope(name):
             if reuse:
                 tf.get_variable_scope().reuse_variables()
