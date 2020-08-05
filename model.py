@@ -82,15 +82,15 @@ class pagan(object):
         self.real_img = tf.placeholder(tf.float32, [None,128,128,3], name='input')
         self.input_label = tf.placeholder(tf.float32, [None,13], name='label')
         self.is_training = tf.placeholder(tf.bool, [None], name='is_training')
-        self.input_label_shf = tf.placeholder(tf.float32, [None,13], name='label')
+        self.input_label_shf = tf.placeholder(tf.float32, [None,13], name='label_shf')
         
 
         ##
         g_network = G_network()
         self.d_network = D_network()
-        self.label_subtract = tf.subtract(self.input_label_shf,self.input_label)
+        label_subtract = tf.subtract(self.input_label_shf,self.input_label)
         #self.fake_img, self.mask, self.ms_multi, self.fa_in, self.ek, self.d_m, self.b_atten = g_network(self.real_img, self.label_subtract)
-        self.fake_img, self.mask, self.ms_multi, self.fa_in = g_network(self.real_img, self.label_subtract)
+        self.fake_img, self.mask, ms_multi, self.fa_in = g_network(self.real_img, label_subtract)
         d_real, c_real = self.d_network(self.real_img, reuse=False)
         d_fake, c_fake = self.d_network(self.fake_img, reuse=True)
 
@@ -99,6 +99,8 @@ class pagan(object):
         self.d_vars = [var for var in t_vars if 'discriminator' in var.name]
         self.g_vars = [var for var in t_vars if 'generator' in var.name]
         #self.c_vars = [var for var in t_vars if 'attribute_classifier' in var.name]
+        print("trainable variables (all) : ")
+        print(t_vars)
         print("trainable variables (discriminator) : ")
         print(self.d_vars)
         print("trainable variables (generator) : ")
@@ -106,24 +108,38 @@ class pagan(object):
         
         # losses
         
-        self.l_c = tf.reduce_sum(tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label,logits=c_real))#binary_criterion(labels=self.input_label, logits=c_real)
-        self.l_att_d = 2*tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label,logits=c_real)
-        self.l_adv_d = self.criterionWGAN(d_fake, d_real) + 10*self.gradient_penalty()
+        l_reg = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+        
+        
 
-        self.l_att_g = 2*tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label_shf,logits=c_fake)
+        #self.l_c = tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label,logits=c_real)
+        self.l_att_d = tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label,logits=c_real)
+        self.l_adv_d = self.criterionWGAN(d_fake, d_real) + 10*self.gradient_penalty()
+        #self.l_reg_d = tf.losses.get_regularization_loss(scope='discriminator')
+        self.l_reg_d = [l for l in l_reg if "discriminator" in l.name]
+
+        self.l_att_g = 20*tf.losses.sigmoid_cross_entropy(multi_class_labels=self.input_label_shf,logits=c_fake)
         self.l_adv_g = -tf.reduce_mean(d_fake)
+        #self.l_adv_g = tf.losses.sigmoid_cross_entropy(tf.ones_like(d_fake), d_fake)
         self.l_spa = tf.reduce_sum([tf.reduce_mean(m) * w for m, w in zip(self.mask, [1.0, 1.0, 1.0, 1.0, 1.0, 1.0])])
         self.l_spa = 0.05*self.l_spa
-        self.l_full_ovl, self.l_none_ovl = overlap_loss_fn(self.ms_multi, self.att_names)
+        self.l_full_ovl, self.l_none_ovl = overlap_loss_fn(ms_multi, self.att_names)
+        #self.l_reg_g = tf.losses.get_regularization_loss(scope='generator')
+        self.l_reg_g = [l for l in l_reg if "generator" in l.name]
 
-
+        #self.g_loss = self.l_adv_g + self.l_spa + \
+        #    self.l_full_ovl + \
+        #    self.l_none_ovl
         self.g_loss = self.l_att_g + \
             self.l_adv_g + self.l_spa + \
             self.l_full_ovl + \
-            self.l_none_ovl #+ regularization_loss
-        self.d_loss = self.l_c + self.l_adv_d + self.l_att_d
+            self.l_none_ovl
+        self.g_loss = tf.add(self.g_loss, tf.reduce_sum(self.l_reg_g))
 
-        self.loss_summary = tf.summary.scalar("loss", self.l_c)
+        ##self.d_loss = self.l_c + self.l_adv_d + self.l_att_d
+        self.d_loss = self.l_adv_d + self.l_att_d
+        self.d_loss = tf.add(self.d_loss, tf.reduce_sum(self.l_reg_d))
+        self.loss_summary = tf.summary.scalar("loss", self.d_loss)
         
 
     def train(self, args):
@@ -138,6 +154,8 @@ class pagan(object):
             .minimize(self.d_loss, var_list=[self.d_vars], global_step = global_step)
         self.G_optim = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
             .minimize(self.g_loss, var_list=[self.g_vars], global_step = global_step)
+        #self.G_optim_att = tf.train.AdamOptimizer(learning_rate, beta1=args.beta1, beta2=args.beta2) \
+        #    .minimize(self.l_att_g, var_list=[self.g_vars], global_step = global_step)
         
         print("initialize")
         init_op = tf.global_variables_initializer()
@@ -160,9 +178,9 @@ class pagan(object):
                 label_batch_shf = shuffle(label_batch)
                 #print(np.subtract(label_batch_shf,label_batch))
                 #print(np.max(np.subtract(label_batch_shf,label_batch)))
-                _, d_loss,l_c,l_adv_d, lr_ = self.sess.run([self.D_optim, self.d_loss,self.l_c,self.l_adv_d, learning_rate], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
-                #print(ls)
-                #print(np.max(ls))
+                _, d_loss,l_adv_d, lr_ = self.sess.run([self.D_optim, self.d_loss,self.l_adv_d, learning_rate], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
+                
+                #_ = self.sess.run([self.G_optim_att], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
                 fake_img, _, g_loss,l_att_g,l_adv_g,l_spa,l_full_ovl,l_none_ovl = self.sess.run([self.fake_img, self.G_optim, self.g_loss,self.l_att_g,self.l_adv_g,self.l_spa,self.l_full_ovl,self.l_none_ovl], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
                 #self.writer.add_summary(summary_str, counter)
 
@@ -170,12 +188,12 @@ class pagan(object):
                 if idx%1==0:
                     print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f | G adv loss: %4.4f | time: %4.2f | lr : %4.4f" % (
                         epoch, idx, batch_idxs, d_loss, g_loss, time.time() - start_time, lr_)))
-                    print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f, %4.4f | G adv loss: %4.4f,%4.4f,%4.4f,%4.4f,%4.4f | time: %4.2f" % (
-                        epoch, idx, batch_idxs, l_c, l_adv_d, l_att_g,l_adv_g,l_spa,l_full_ovl,l_none_ovl, time.time() - start_time)))
+                    print(("Epoch: [%2d] [%4d/%4d] | D adv loss: %4.4f | G adv loss: %4.4f,%4.4f,%4.4f,%4.4f,%4.4f | time: %4.2f" % (
+                        epoch, idx, batch_idxs, l_adv_d, l_att_g,l_adv_g,l_spa,l_full_ovl,l_none_ovl, time.time() - start_time)))
 
                 if idx%10 == 0:
                     temp_fake = (fake_img[0]+1)*127.5
-                    cv2.imwrite('./sample/fake_e'+str(epoch)+str(idx)+'.bmp', temp_fake)
+                    #cv2.imwrite('./sample/fake_e'+str(epoch)+str(idx)+'.bmp', temp_fake)
                     modi_att = np.random.randint(0,13)
                     #label_batch_shf = label_batch.copy()
                     #label_batch_shf[0][modi_att] = 2

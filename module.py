@@ -28,13 +28,14 @@ class D_network:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            net = self.d_common(inputs, reuse=reuse)
-            #d_out = self.discriminator(net, reuse=reuse)
-            #c_out = self.attribute_classifier(net, reuse=reuse)
-            d_ = slim.fully_connected(net, 512, activation_fn=tf.nn.leaky_relu, reuse=reuse, scope='f_d')
-            d_out = slim.fully_connected(d_, 1, reuse=reuse, scope='f_d_out')
-            c_ = slim.fully_connected(net, 512, activation_fn=tf.nn.leaky_relu, reuse=reuse, scope='f_c')
-            c_out = slim.fully_connected(c_, 13, reuse=reuse, scope='f_c_out')
+            with slim.arg_scope([slim.conv2d, slim.fully_connected], weights_regularizer=slim.l2_regularizer(0.001)):
+                net = self.d_common(inputs, reuse=reuse)
+                #d_out = self.discriminator(net, reuse=reuse)
+                #c_out = self.attribute_classifier(net, reuse=reuse)
+                d_ = slim.fully_connected(net, 512, activation_fn=tf.nn.leaky_relu, reuse=reuse, scope='f_d')
+                d_out = slim.fully_connected(d_, 1, reuse=reuse, scope='f_d_out')
+                c_ = slim.fully_connected(net, 512, activation_fn=tf.nn.leaky_relu, reuse=reuse, scope='f_c')
+                c_out = slim.fully_connected(c_, 13, reuse=reuse, scope='f_c_out')
 
         return d_out, c_out
 
@@ -60,16 +61,17 @@ class G_network:
                 tf.get_variable_scope().reuse_variables()
             else:
                 assert tf.get_variable_scope().reuse is False
-            #en_out = self.encoder(xa)
-            #b = tf.to_float(b)
-            fa2 = conv_bn_activ(xa, 64, 4, 2)     # (?, 64, 64, 128)
-            fa3 = conv_bn_activ(fa2, 128, 4, 2)     # (?, 32, 32, 256)
-            fb4 = conv_bn_activ(fa3, 256, 4, 2)     # (?, 16, 16, 512)
+            with slim.arg_scope([slim.conv2d, slim.fully_connected], weights_regularizer=slim.l2_regularizer(0.001)):
+                #en_out = self.encoder(xa)
+                #b = tf.to_float(b)
+                fa2 = conv_bn_activ(xa, 64, 4, 2)     # (?, 64, 64, 128)
+                fa3 = conv_bn_activ(fa2, 128, 4, 2)     # (?, 32, 32, 256)
+                fb4 = conv_bn_activ(fa3, 256, 4, 2)     # (?, 16, 16, 512)
 
-            m_multi4 = tf.zeros_like(fb4[:,:,:,:13])     # (?, 16, 16, 13)
-            fb3, mb3, m_multi3, fa_in3, ek_3, _, _ = self.attentive_editor(fa3, fb4, k=3, b_att=b, mask_in=m_multi4, reuse=False) #(out) fb3:,mb3, (in) fa[0]:32, fb4:16, mb4:16
-            fb2, mb2, m_multi2, fa_in2, ek_2, _, _ = self.attentive_editor(fa2, fb3, k=2, b_att=b, mask_in=m_multi3, reuse=False)
-            fb1, mb1, m_multi1, fa_in1, ek_1, delta_m, b_reshape = self.attentive_editor(xa, fb2, k=1, b_att=b, mask_in=m_multi2, reuse=False)
+                m_multi4 = tf.zeros_like(fb4[:,:,:,:13])     # (?, 16, 16, 13)
+                fb3, mb3, m_multi3, fa_in3 = self.attentive_editor(fa3, fb4, k=3, b_att=b, mask_in=m_multi4, reuse=False) #(out) fb3:,mb3, (in) fa[0]:32, fb4:16, mb4:16
+                fb2, mb2, m_multi2, fa_in2 = self.attentive_editor(fa2, fb3, k=2, b_att=b, mask_in=m_multi3, reuse=False)
+                fb1, mb1, m_multi1, fa_in1 = self.attentive_editor(xa, fb2, k=1, b_att=b, mask_in=m_multi2, reuse=False)
 
         #return fb1, [mb3,mb2,mb1], [m_multi3,m_multi2,m_multi1], [fa_in3, fa_in2, fa_in1], [ek_3, ek_2, ek_1], delta_m, b
         return fb1, [mb3,mb2,mb1], [m_multi3,m_multi2,m_multi1], [fa_in3, fa_in2, fa_in1]#, [ek_3, ek_2, ek_1], delta_m, b
@@ -97,7 +99,7 @@ class G_network:
             m = tf.clip_by_value(tf.reduce_sum(b * tf.nn.sigmoid(mbk), axis=-1, keep_dims=True), 0.0, 1.0)
             print("test")
             fb_k = (1-m)*fa_in + m*ek
-        return fb_k, m, mbk, fa_in, ek, delta_mask_k, b
+        return fb_k, m, mbk, fa_in #, ek, delta_mask_k, b
 
     def attentive_editor_e_k(self, inputs, b, k, reuse=False, name="attentive_editor_e_k"):
 
@@ -142,9 +144,9 @@ class G_network:
             net = tf.concat([net_a, net_b, net_c, net_d], axis=-1)
 
             net = conv_bn_activ(net,32*2**(k),4,2)
-            net = slim.conv2d_transpose(net, b.shape[-1], 4, 2)
+            delta_mask = slim.conv2d_transpose(net, b.shape[-1], 4, 2)
 
-        return net
+        return delta_mask
 
 
 ######################
