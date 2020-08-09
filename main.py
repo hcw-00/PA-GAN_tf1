@@ -10,8 +10,8 @@ default_att_names = ['Bald', 'Bangs', 'Black_Hair', 'Blond_Hair', 'Brown_Hair', 
 def get_params():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--att_names', dest='att_names', default=default_att_names)
-    parser.add_argument('--ckpt_dir', dest='ckpt_dir', default='ckpt6', help='checkpoint name')
-    parser.add_argument('--epoch', dest='epoch', type=int, default=50, help='# of epoch')
+    parser.add_argument('--ckpt_dir', dest='ckpt_dir', default='ckpt12', help='checkpoint name')
+    parser.add_argument('--epoch', dest='epoch', type=int, default=10, help='# of epoch')
     parser.add_argument('--epoch_step', dest='epoch_step', type=int, default=1000, help='# of epoch to decay lr')
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=32, help='# images in batch')
     parser.add_argument('--lr', dest='lr', type=float, default=0.0002, help='initial learning rate for adam') # default=0.0002

@@ -1,4 +1,5 @@
 from __future__ import division
+import sklearn
 import os
 import time
 from glob import glob
@@ -10,7 +11,6 @@ from module import *
 from utils import *
 import utils
 import cv2
-from imgaug import augmenters as iaa
 
 #TODO : add noise input eta
 
@@ -70,9 +70,10 @@ class pagan(object):
                 img = cv2.flip(img, 1)
             img = get_random_crop(img, crop_size, crop_size)
             img = img/127.5 - 1
+            #img = img/255s
             img_batch.append(img)
             temp_label = [int(j) for j in labels[i+idx*self.batch_size]]
-            #label = (temp_label+np.ones_like(temp_label))//2
+            temp_label = (temp_label+np.ones_like(temp_label))//2
             label_batch.append(temp_label)
         return img_batch, label_batch
 
@@ -88,9 +89,13 @@ class pagan(object):
         ##
         g_network = G_network()
         self.d_network = D_network()
-        label_subtract = tf.subtract(self.input_label_shf,self.input_label)
+        self.input_label_ = self.input_label * 2 - 1
+        self.input_label_shf_ = self.input_label_shf * 2 - 1
+        #self.label_subtract = tf.subtract(self.input_label_shf_,self.input_label_)
+        self.label_subtract = self.input_label_shf_ - self.input_label_
         #self.fake_img, self.mask, self.ms_multi, self.fa_in, self.ek, self.d_m, self.b_atten = g_network(self.real_img, self.label_subtract)
-        self.fake_img, self.mask, ms_multi, self.fa_in = g_network(self.real_img, label_subtract)
+        #self.fake_img, self.mask, ms_multi, self.fa_in = g_network(self.real_img, label_subtract)
+        self.fake_img, self.mask, ms_multi = g_network(self.real_img, self.label_subtract)
         d_real, c_real = self.d_network(self.real_img, reuse=False)
         d_fake, c_fake = self.d_network(self.fake_img, reuse=True)
 
@@ -178,6 +183,9 @@ class pagan(object):
                 label_batch_shf = shuffle(label_batch)
                 #print(np.subtract(label_batch_shf,label_batch))
                 #print(np.max(np.subtract(label_batch_shf,label_batch)))
+                _ = self.sess.run([self.D_optim], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
+                _ = self.sess.run([self.D_optim], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
+                _ = self.sess.run([self.D_optim], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
                 _, d_loss,l_adv_d, lr_ = self.sess.run([self.D_optim, self.d_loss,self.l_adv_d, learning_rate], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
                 
                 #_ = self.sess.run([self.G_optim_att], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
@@ -199,15 +207,24 @@ class pagan(object):
                     #label_batch_shf[0][modi_att] = 2
                     #label_batch_shf = shuffle(label_batch)
                     #fake_img, temp_label, mask, fa_in, ek, dm, b_atten = self.sess.run([self.fake_img, self.input_label, self.mask, self.fa_in, self.ek, self.d_m,self.b_atten], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
-                    fake_img, fa_in, mask = self.sess.run([self.fake_img, self.fa_in, self.mask], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
+                    fake_img, mask = self.sess.run([self.fake_img, self.mask], feed_dict={self.real_img:img_batch, self.input_label:label_batch, self.input_label_shf:label_batch_shf})
                     temp_fake = (fake_img[0]+1)*127.5
-                    mask_o = (mask[2][0]*255)
-                    fa_in_o = (fa_in[2][0]+1)*127.5
+                    ## check
+                    #mask_o = (mask[2][0]*255)
+                    #mask_o0 = (mask[0][0]*255)
+                    #mask_o1 = (mask[1][0]*255)
+                    mask_o = (mask[2][0]+1)*127.5
+                    mask_o0 = (mask[0][0]+1)*127.5
+                    mask_o1 = (mask[1][0]+1)*127.5
+
+                    #fa_in_o = (fa_in[2][0]+1)*127.5
                     #ek_o = (ek[2][0]+1)*127.5
                     #dm_o = np.mean(dm[0], axis=2)*255
                     cv2.imwrite('./sample/fake_e'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', temp_fake)
-                    cv2.imwrite('./sample/mask_'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', mask_o)
-                    cv2.imwrite('./sample/fa_in_'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', fa_in_o)
+                    cv2.imwrite('./sample/mask_'+str(epoch)+str(idx)+att_names[modi_att]+'0.bmp', mask_o0)
+                    cv2.imwrite('./sample/mask_'+str(epoch)+str(idx)+att_names[modi_att]+'1.bmp', mask_o1)
+                    cv2.imwrite('./sample/mask_'+str(epoch)+str(idx)+att_names[modi_att]+'2.bmp', mask_o)
+                    #cv2.imwrite('./sample/fa_in_'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', fa_in_o)
                     #cv2.imwrite('./sample/ek_'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', ek_o)
                     #cv2.imwrite('./sample/dm_'+str(epoch)+str(idx)+att_names[modi_att]+'.bmp', dm_o)
                 if idx == batch_idxs-1 or idx%int(batch_idxs/4) == 0:
